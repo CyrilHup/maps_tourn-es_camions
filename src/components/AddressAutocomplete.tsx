@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { MapPin, Search, Loader2, X } from 'lucide-react';
 import { useAddressSearch, AddressSuggestion } from '../hooks/useAddressSearch.ts';
 
@@ -31,18 +31,36 @@ export default function AddressAutocomplete({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
 
   const { suggestions, isLoading, error, searchAddresses, clearSuggestions } = useAddressSearch();
 
+  // Track mounted state to prevent state updates after unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Clear all timeouts on unmount
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      if (blurTimeoutRef.current) {
+        clearTimeout(blurTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Fonction pour gérer la fermeture et le callback onBlur
-  const handleBlurAction = () => {
+  const handleBlurAction = useCallback(() => {
+    if (!isMountedRef.current) return;
     setIsOpen(false);
     setSelectedIndex(-1);
     if (onBlur) {
       onBlur();
     }
-  };
+  }, [onBlur]);
 
   // Recherche avec debounce optimisé
   useEffect(() => {
@@ -52,8 +70,10 @@ export default function AddressAutocomplete({
 
     if (value.length >= 3) {
       timeoutRef.current = setTimeout(() => {
-        searchAddresses(value);
-        setIsOpen(true);
+        if (isMountedRef.current) {
+          searchAddresses(value);
+          setIsOpen(true);
+        }
       }, 500); // Délai de 500ms pour réduire les appels API
     } else {
       clearSuggestions();
@@ -247,8 +267,14 @@ export default function AddressAutocomplete({
           onBlur={() => {
             // Add a small delay to allow click events on suggestions to fire first
             // The click-outside handler will handle immediate outside clicks without delay
-            setTimeout(() => {
-              handleBlurAction();
+            // Clear any existing blur timeout to prevent double-firing
+            if (blurTimeoutRef.current) {
+              clearTimeout(blurTimeoutRef.current);
+            }
+            blurTimeoutRef.current = setTimeout(() => {
+              if (isMountedRef.current) {
+                handleBlurAction();
+              }
             }, 150);
           }}
           placeholder={placeholder}

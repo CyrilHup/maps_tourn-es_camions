@@ -1,17 +1,42 @@
 import { Location, Route, RouteSegment, VehicleType, OptimizationMethod, RouteOptimizationRequest, RouteOptimizationResponse } from '../types/index.ts';
 import { getCachedRoute, setCachedRoute } from '../utils/cacheManager.ts';
+import { routingLogger as logger } from '../utils/logger.ts';
+import { config } from '../config/index.ts';
 
 export interface FreeRoutingProvider {
   calculateRoute(request: RouteOptimizationRequest): Promise<RouteOptimizationResponse>;
   geocodeAddress(address: string): Promise<{ latitude: number; longitude: number } | null>;
 }
 
+// Maximum number of segments to keep in cache to prevent memory leaks
+const MAX_SEGMENT_CACHE_SIZE = 100;
+
+// OpenRouteService API configuration
+const ORS_BASE_URL = 'https://api.openrouteservice.org';
+
 export class OpenStreetMapRoutingService implements FreeRoutingProvider {
   private nominatimBaseUrl = 'https://nominatim.openstreetmap.org';
   private osrmBaseUrl = 'https://router.project-osrm.org';
+  private openRouteServiceApiKey: string | null = null;
   
-  // Cache for calculated segments to avoid redundant API calls
+  // Cache for calculated segments to avoid redundant API calls (LRU-like with max size)
   private segmentCache = new Map<string, RouteSegment>();
+  private segmentCacheOrder: string[] = []; // Track insertion order for LRU eviction
+
+  constructor() {
+    // Check for OpenRouteService API key for real truck routing
+    this.openRouteServiceApiKey = import.meta.env.VITE_OPENROUTESERVICE_API_KEY || null;
+    if (this.openRouteServiceApiKey) {
+      logger.info('OpenRouteService API key configurée - routing camion réel activé');
+    }
+  }
+
+  /**
+   * Check if real truck routing is available via OpenRouteService
+   */
+  public hasTruckRouting(): boolean {
+    return !!this.openRouteServiceApiKey;
+  }
 
   private generateSegmentKey(from: Location, to: Location, vehicleType: VehicleType): string {
     return `${from.id}-${to.id}-${vehicleType}`;
@@ -27,7 +52,7 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
     // Vérifier le cache en premier
     const cachedRoute = getCachedRoute(request);
     if (cachedRoute) {
-      console.log('⚡ Route trouvée dans le cache, retour immédiat');
+      logger.debug('Route trouvée dans le cache, retour immédiat');
       return {
         route: cachedRoute,
         metadata: {
@@ -81,7 +106,7 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
       };
 
       // Log optimization results for debugging
-      console.log(`🚗 Optimisation de trajet terminée:`, {
+      logger.debug('Optimisation de trajet terminée:', {
         vehicleType: request.vehicleType,
         method: request.optimizationMethod,
         isLoop: request.isLoop,
@@ -93,15 +118,15 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
 
       // Enhanced logging to show parameter effects
       if (request.optimizationMethod === 'shortest_distance') {
-        console.log(`📏 Optimisé pour DISTANCE LA PLUS COURTE: ${route.totalDistance.toFixed(1)}km`);
+        logger.debug(`Optimisé pour DISTANCE LA PLUS COURTE: ${route.totalDistance.toFixed(1)}km`);
       } else if (request.optimizationMethod === 'fastest_time') {
-        console.log(`⏱️ Optimisé pour TEMPS LE PLUS RAPIDE: ${Math.round(route.totalDuration)}min`);
+        logger.debug(`Optimisé pour TEMPS LE PLUS RAPIDE: ${Math.round(route.totalDuration)}min`);
       } else {
-        console.log(`⚖️ Optimisation ÉQUILIBRÉE: ${route.totalDistance.toFixed(1)}km / ${Math.round(route.totalDuration)}min`);
+        logger.debug(`Optimisation ÉQUILIBRÉE: ${route.totalDistance.toFixed(1)}km / ${Math.round(route.totalDuration)}min`);
       }
 
       // Cache performance summary
-      console.log(`💾 Performance du cache: ${this.segmentCache.size} segments en cache`);
+      logger.debug(`Performance du cache: ${this.segmentCache.size} segments en cache`);
 
       // Sauvegarder la route calculée dans le cache
       setCachedRoute(request, route);
@@ -115,7 +140,7 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
         },
       };
     } catch (error) {
-      console.error('Échec du calcul de trajet:', error);
+      logger.error('Échec du calcul de trajet:', error);
       throw new Error(`Impossible de calculer le trajet: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
     }
   }
@@ -147,7 +172,7 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
       
       return null;
     } catch (error) {
-      console.error('Échec du géocodage:', error);
+      logger.error('Échec du géocodage:', error);
       return null;
     }
   }
@@ -172,38 +197,6 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
 
     // Pour des performances optimales avec l'API, utiliser une approche hybride
     let optimized: Location[];
-    
-    // Debug: Test all methods if there are exactly 3-4 locations for comparison
-    if (unlockedLocations.length >= 3 && unlockedLocations.length <= 4) {
-      console.log(`🧪 Test des méthodes d'optimisation pour ${unlockedLocations.length} emplacements (avec cache):`);
-      
-      const methods: OptimizationMethod[] = ['shortest_distance', 'fastest_time', 'balanced'];
-      const results: { method: OptimizationMethod; score: number; order: string[] }[] = [];
-      
-      // Pre-calculate all possible segments once to populate cache
-      console.log(`🔄 Pré-calcul des segments pour le cache...`);
-      for (let i = 0; i < unlockedLocations.length; i++) {
-        for (let j = 0; j < unlockedLocations.length; j++) {
-          if (i !== j) {
-            await this.calculateSegment(unlockedLocations[i], unlockedLocations[j], vehicleType);
-          }
-        }
-      }
-      
-      for (const testMethod of methods) {
-        if (unlockedLocations.length <= 8) {
-          const testOptimized = await this.advancedOptimization(unlockedLocations, testMethod, isLoop, vehicleType);
-          const testScore = await this.calculateOrderScore(testOptimized, testMethod, isLoop, vehicleType);
-          results.push({
-            method: testMethod,
-            score: testScore,
-            order: testOptimized.map(loc => loc.address.substring(0, 20))
-          });
-        }
-      }
-      
-      console.table(results);
-    }
     
     if (unlockedLocations.length <= 8) {
       // Pour peu d'emplacements, utiliser un algorithme plus sophistiqué
@@ -413,13 +406,13 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
     let bestOrder = locations;
     let bestScore = Infinity;
 
-    console.log(`🔄 Optimisation intelligente de boucle pour ${locations.length} emplacements à partir de ${startLocation.address.substring(0, 30)}`);
-    console.log(`📊 Test de plusieurs stratégies d'optimisation:`);
+    logger.debug(`Optimisation intelligente de boucle pour ${locations.length} emplacements à partir de ${startLocation.address.substring(0, 30)}`);
+    logger.debug('Test de plusieurs stratégies d\'optimisation:');
 
     // Approach 1: Nearest neighbor from start
     const nearestFirst = await this.findNearestNeighborLoop(startLocation, otherLocations, method);
     const nearestScore = await this.calculateCompleteLoopScore(nearestFirst, method);
-    console.log(`  ✅ Stratégie du plus proche d'abord: ${nearestScore.toFixed(1)} score`);
+    logger.debug(`  Stratégie du plus proche d'abord: ${nearestScore.toFixed(1)} score`);
     
     if (nearestScore < bestScore) {
       bestScore = nearestScore;
@@ -429,7 +422,7 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
     // Approach 2: Farthest first (sometimes better for loops)
     const farthestFirst = await this.findFarthestFirstLoop(startLocation, otherLocations);
     const farthestScore = await this.calculateCompleteLoopScore(farthestFirst, method);
-    console.log(`  ✅ Stratégie du plus loin d'abord: ${farthestScore.toFixed(1)} score`);
+    logger.debug(`  Stratégie du plus loin d'abord: ${farthestScore.toFixed(1)} score`);
     
     if (farthestScore < bestScore) {
       bestScore = farthestScore;
@@ -441,7 +434,7 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
       const testOrder = [startLocation, otherLocations[i], ...otherLocations.filter((_, idx) => idx !== i)];
       const reorderedTest = await this.optimizeFromSecondLocation(testOrder);
       const testScore = await this.calculateCompleteLoopScore(reorderedTest, method);
-      console.log(`  ✅ Stratégie commencer-par-${otherLocations[i].address.substring(0, 20)}: ${testScore.toFixed(1)} score`);
+      logger.debug(`  Stratégie commencer-par-${otherLocations[i].address.substring(0, 20)}: ${testScore.toFixed(1)} score`);
       
       if (testScore < bestScore) {
         bestScore = testScore;
@@ -449,8 +442,8 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
       }
     }
 
-    console.log(`🏆 Meilleur score de boucle: ${bestScore.toFixed(1)} pour la méthode: ${method}`);
-    console.log(`🗺️ Ordre optimal: ${bestOrder.map(loc => loc.address.substring(0, 20)).join(' → ')} → ${bestOrder[0].address.substring(0, 20)}`);
+    logger.debug(`Meilleur score de boucle: ${bestScore.toFixed(1)} pour la méthode: ${method}`);
+    logger.debug(`Ordre optimal: ${bestOrder.map(loc => loc.address.substring(0, 20)).join(' → ')} → ${bestOrder[0].address.substring(0, 20)}`);
     return bestOrder;
   }
 
@@ -718,11 +711,21 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
     const cacheKey = this.generateSegmentKey(from, to, vehicleType);
     const cachedSegment = this.segmentCache.get(cacheKey);
     if (cachedSegment) {
-      console.log(`💾 Cache trouvé pour segment: ${from.address.substring(0,20)} -> ${to.address.substring(0,20)}`);
+      logger.debug(`Cache trouvé pour segment: ${from.address.substring(0,20)} -> ${to.address.substring(0,20)}`);
       return cachedSegment;
     }
 
-    console.log(`🌐 Appel API pour segment: ${from.address.substring(0,20)} -> ${to.address.substring(0,20)}`);
+    logger.debug(`Appel API pour segment: ${from.address.substring(0,20)} -> ${to.address.substring(0,20)}`);
+
+    // Use OpenRouteService for truck routing if API key is available
+    if (vehicleType === 'truck' && this.openRouteServiceApiKey) {
+      try {
+        return await this.calculateSegmentWithORS(from, to, cacheKey);
+      } catch (error) {
+        logger.warn('OpenRouteService échoué, fallback vers OSRM:', error);
+        // Fall through to OSRM
+      }
+    }
 
     try {
       // Use different profiles for different vehicle types
@@ -762,14 +765,14 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
           polyline: route.geometry, // Keep GeoJSON geometry
         };
 
-        // Cache the calculated segment
-        this.segmentCache.set(cacheKey, segment);
+        // Cache the calculated segment with LRU eviction
+        this.cacheSegment(cacheKey, segment);
         return segment;
       } else {
         throw new Error('Aucun trajet trouvé');
       }
     } catch (error) {
-      console.error('Échec du calcul de segment, utilisation de la ligne droite:', error);
+      logger.warn('Échec du calcul de segment, utilisation de la ligne droite:', error);
       
       // Fallback: straight line calculation with vehicle-specific speeds
       const distance = this.calculateDistance(from.coordinates, to.coordinates);
@@ -785,8 +788,8 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
         polyline: null,
       };
 
-      // Cache the fallback segment too
-      this.segmentCache.set(cacheKey, fallbackSegment);
+      // Cache the fallback segment too with LRU eviction
+      this.cacheSegment(cacheKey, fallbackSegment);
       return fallbackSegment;
     }
   }
@@ -814,7 +817,143 @@ export class OpenStreetMapRoutingService implements FreeRoutingProvider {
   }
 
   private generateRouteId(): string {
-    return `route_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `route_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  }
+
+  /**
+   * Calculate a segment using OpenRouteService API with driving-hgv (heavy goods vehicle) profile
+   * This provides real truck routing with actual restrictions (weight, height, etc.)
+   */
+  private async calculateSegmentWithORS(
+    from: Location,
+    to: Location,
+    cacheKey: string
+  ): Promise<RouteSegment> {
+    if (!from.coordinates || !to.coordinates) {
+      throw new Error('Les deux emplacements doivent avoir des coordonnées');
+    }
+
+    const url = `${ORS_BASE_URL}/v2/directions/driving-hgv`;
+    
+    const body = {
+      coordinates: [
+        [from.coordinates.longitude, from.coordinates.latitude],
+        [to.coordinates.longitude, to.coordinates.latitude]
+      ],
+      instructions: true,
+      geometry: true,
+      // Truck-specific parameters
+      profile: 'driving-hgv',
+      units: 'km',
+      language: 'fr',
+    };
+
+    logger.debug('Appel OpenRouteService pour camion:', {
+      from: from.address.substring(0, 30),
+      to: to.address.substring(0, 30)
+    });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': this.openRouteServiceApiKey!,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouteService API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.routes || data.routes.length === 0) {
+      throw new Error('Aucun trajet camion trouvé');
+    }
+
+    const route = data.routes[0];
+    const summary = route.summary;
+
+    const segment: RouteSegment = {
+      from,
+      to,
+      distance: summary.distance, // Already in km
+      duration: summary.duration / 60, // Convert seconds to minutes
+      instructions: route.segments?.[0]?.steps?.map((step: { instruction: string; distance: number }) => 
+        step.instruction || `Continuer pendant ${step.distance.toFixed(1)}km`
+      ) || [],
+      polyline: route.geometry ? {
+        type: 'LineString',
+        coordinates: this.decodeORSGeometry(route.geometry)
+      } : null,
+    };
+
+    logger.debug('Segment camion ORS calculé:', {
+      distance: segment.distance.toFixed(1) + 'km',
+      duration: segment.duration.toFixed(0) + 'min'
+    });
+
+    // Cache the segment
+    this.cacheSegment(cacheKey, segment);
+    return segment;
+  }
+
+  /**
+   * Decode OpenRouteService encoded polyline geometry
+   */
+  private decodeORSGeometry(encoded: string): number[][] {
+    // ORS uses Google's polyline encoding
+    const coordinates: number[][] = [];
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+
+    while (index < encoded.length) {
+      let shift = 0;
+      let result = 0;
+      let b: number;
+
+      // Decode latitude
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      lat += result & 1 ? ~(result >> 1) : result >> 1;
+
+      shift = 0;
+      result = 0;
+
+      // Decode longitude
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      lng += result & 1 ? ~(result >> 1) : result >> 1;
+
+      coordinates.push([lng / 1e5, lat / 1e5]);
+    }
+
+    return coordinates;
+  }
+
+  // LRU-like cache management for segments
+  private cacheSegment(key: string, segment: RouteSegment): void {
+    // If cache is full, remove oldest entries
+    while (this.segmentCache.size >= MAX_SEGMENT_CACHE_SIZE && this.segmentCacheOrder.length > 0) {
+      const oldestKey = this.segmentCacheOrder.shift();
+      if (oldestKey) {
+        this.segmentCache.delete(oldestKey);
+        logger.debug(`Cache segment évincé (LRU): ${oldestKey.substring(0, 30)}...`);
+      }
+    }
+    
+    // Add new segment to cache
+    this.segmentCache.set(key, segment);
+    this.segmentCacheOrder.push(key);
   }
 
   private factorial(n: number): number {

@@ -1,5 +1,6 @@
 // Cache management for route calculations and user preferences
 import { Route, RouteOptimizationRequest } from '../types/index';
+import { cacheLogger as logger } from './logger';
 
 // Cache pour les routes calculées
 const routeCache = new Map<string, { route: Route, timestamp: number }>();
@@ -31,7 +32,7 @@ export function cleanRouteCache(): void {
   for (const [key, value] of routeCache.entries()) {
     if (now - value.timestamp > ROUTE_CACHE_DURATION) {
       routeCache.delete(key);
-      console.log(`🗑️ Route expirée supprimée du cache: ${key.substring(0, 20)}...`);
+      logger.debug(`Route expirée supprimée du cache: ${key.substring(0, 20)}...`);
     }
   }
 }
@@ -44,7 +45,7 @@ export function getCachedRoute(request: RouteOptimizationRequest): Route | null 
   const cached = routeCache.get(key);
   
   if (cached && Date.now() - cached.timestamp < ROUTE_CACHE_DURATION) {
-    console.log(`⚡ Route récupérée du cache: ${key.substring(0, 20)}...`);
+    logger.debug(`Route récupérée du cache: ${key.substring(0, 20)}...`);
     return cached.route;
   }
   
@@ -59,14 +60,14 @@ export function setCachedRoute(request: RouteOptimizationRequest, route: Route):
     timestamp: Date.now()
   });
   
-  console.log(`💾 Route mise en cache: ${key.substring(0, 20)}...`);
+  logger.debug(`Route mise en cache: ${key.substring(0, 20)}...`);
   
   // Nettoyer le cache si il devient trop gros (max 50 routes)
   if (routeCache.size > 50) {
     const oldestKey = Array.from(routeCache.entries())
       .sort((a, b) => a[1].timestamp - b[1].timestamp)[0][0];
     routeCache.delete(oldestKey);
-    console.log(`🧹 Cache trop volumineux, suppression de la plus ancienne route`);
+    logger.debug('Cache trop volumineux, suppression de la plus ancienne route');
   }
 }
 
@@ -74,9 +75,9 @@ export function setCachedRoute(request: RouteOptimizationRequest, route: Route):
 export function saveUserPreferences(preferences: UserPreferences): void {
   try {
     localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
-    console.log('💾 Préférences utilisateur sauvegardées');
+    logger.debug('Préférences utilisateur sauvegardées');
   } catch (error) {
-    console.warn('⚠️ Impossible de sauvegarder les préférences:', error);
+    logger.warn('Impossible de sauvegarder les préférences:', error);
   }
 }
 
@@ -86,11 +87,11 @@ export function getUserPreferences(): UserPreferences | null {
     const stored = localStorage.getItem(PREFERENCES_KEY);
     if (stored) {
       const preferences = JSON.parse(stored);
-      console.log('📖 Préférences utilisateur chargées');
+      logger.debug('Préférences utilisateur chargées');
       return preferences;
     }
   } catch (error) {
-    console.warn('⚠️ Impossible de charger les préférences:', error);
+    logger.warn('Impossible de charger les préférences:', error);
   }
   
   return null;
@@ -111,7 +112,7 @@ export function getDefaultPreferences(): UserPreferences {
 export function clearAllCache(): void {
   routeCache.clear();
   localStorage.removeItem(PREFERENCES_KEY);
-  console.log('🗑️ Tout le cache a été vidé');
+  logger.debug('Tout le cache a été vidé');
 }
 
 // Statistiques du cache

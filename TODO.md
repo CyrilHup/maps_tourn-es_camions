@@ -5,9 +5,20 @@ A web application for finding shortest routes between multiple locations, suppor
 
 ## Phase 1: Project Setup & Foundation ✅
 - [x] Initialize project structure
-- [x] **Enhanced Click-Outside Funct🚀 **Project Status**: Phase 9 Complete ✅ - Performance & Optimization Finished
-📅 **Last Updated**: July 20, 2025  
-🎯 **Next Milestone**: Phase 10 - Testing & Quality Assurance
+- [x] **Enhanced Click-Outside Funct🚀 **Project Status**: Phase 10 In Progress ✅ - Production Readiness Achieved
+📅 **Last Updated**: January 11, 2026  
+🎯 **Next Milestone**: Phase 11 - Documentation & Deployment
+
+**Production Readiness Improvements (Latest)**:
+- ✅ **Test Infrastructure**: Vitest setup with jsdom, comprehensive mocks
+- ✅ **Unit Tests**: 55 tests for routeUtils and cacheManager (all passing)
+- ✅ **Logger Utility**: Production-safe logging system
+- ✅ **Memory Management**: LRU cache with automatic eviction
+- ✅ **Real Truck Routing**: OpenRouteService driving-hgv profile integration
+- ✅ **TypeScript Hardening**: Proper GeoJSON types, no `any` in critical paths
+- ✅ **React Optimizations**: useCallback, cleanup refs, memory leak fixes
+- ✅ **Accessibility**: ARIA labels on all icon-only buttons
+- ✅ **Security**: Production sourcemaps disabled, unused deps removed (120 packages)
 
 **Recent UI Cleanup**:
 - ✅ **REMOVED**: "Voir Détails" button and RouteResults modal window (user-requested removal as redundant functionality)
@@ -337,28 +348,50 @@ A web application for finding shortest routes between multiple locations, suppor
   - [x] **NEW**: Memory-efficient cache management with size limits
   - [x] **NEW**: Performance monitoring and cache statistics
 
-## Phase 10: Testing & Quality Assurance
-- [ ] Unit Testing
-  - [ ] Test route calculation functions
-  - [ ] Test location input validation
-  - [ ] Test file upload functionality
-  - [ ] Test optimization algorithms
+## Phase 10: Testing & Quality Assurance ✅ (Production Readiness Complete)
 
-- [ ] Integration Testing
-  - [ ] Test API integrations
-  - [ ] Test map functionality
-  - [ ] Test end-to-end user workflows
+### Production Readiness Improvements (July 2025)
+- ✅ **Test Infrastructure**: Complete test setup with Vitest, jsdom, mocks
+- ✅ **Unit Tests**: 55 tests covering routeUtils and cacheManager (100% passing)
+- ✅ **Logger Utility**: Production-safe logging (errors always, debug only in dev)
+- ✅ **Memory Management**: LRU cache eviction for route segments (max 100)
+- ✅ **TypeScript Fixes**: Proper GeoJSON types replacing `any`
+- ✅ **React Optimizations**: useCallback wrappers, setTimeout cleanup with isMountedRef
+- ✅ **Accessibility**: aria-label attributes on all icon-only buttons
+- ✅ **Security Hardening**: Sourcemaps disabled in production, unused deps removed
+- ✅ **Real Truck Routing**: OpenRouteService API integration with driving-hgv profile
+- ✅ **Bundle Optimization**: Removed 120 unused packages (mapbox-gl, zustand, etc.)
 
-- [ ] User Testing
-  - [ ] Usability testing with real users
-  - [ ] Performance testing on different devices
-  - [ ] Cross-browser testing
+### Unit Testing ✅ (Complete)
+- [x] Test route calculation functions (routeUtils.test.ts - 35 tests)
+  - [x] calculateDistance (Haversine formula)
+  - [x] parseGPSCoordinates (various formats)
+  - [x] formatDuration and formatDistance
+  - [x] generateId and isAddress detection
+  - [x] trimAddress normalization
+  - [x] Polyline encoding/decoding
+- [x] Test caching functionality (cacheManager.test.ts - 20 tests)
+  - [x] generateRouteKey key generation
+  - [x] getCachedRoute and setCachedRoute
+  - [x] cleanRouteCache expiration
+  - [x] User preferences persistence
 
-### Testing Infrastructure (Configured but no tests written yet)
-- ✅ **Testing Framework**: Vitest configured
+### Integration Testing
+- [ ] Test API integrations
+- [ ] Test map functionality
+- [ ] Test end-to-end user workflows
+
+### User Testing
+- [ ] Usability testing with real users
+- [ ] Performance testing on different devices
+- [ ] Cross-browser testing
+
+### Testing Infrastructure ✅ (Complete)
+- ✅ **Testing Framework**: Vitest configured with jsdom@24
+- ✅ **Test Setup**: src/test/setup.ts with mocks (localStorage, fetch, ResizeObserver)
 - ✅ **Coverage Tool**: @vitest/coverage-v8 configured  
 - ✅ **UI Testing**: @vitest/ui configured
-- ❌ **Test Files**: No actual test files created yet
+- ✅ **Test Files**: 2 test suites, 55 tests total, all passing
 
 ## Phase 11: Documentation & Deployment
 - [ ] Documentation
@@ -406,10 +439,11 @@ A web application for finding shortest routes between multiple locations, suppor
 
 ### APIs & Services (All Free)
 - ✅ **Geocoding**: Nominatim (OpenStreetMap)
-- ✅ **Routing**: OSRM Project 
+- ✅ **Car Routing**: OSRM Project (free, no API key)
+- ✅ **Truck Routing**: OpenRouteService driving-hgv profile (free tier: 2,000 req/day)
 - ✅ **Maps**: OpenStreetMap tiles
-- ✅ **No API Keys**: No registration required
-- ✅ **No Rate Limits**: Reasonable usage accepted
+- ✅ **Real Truck Restrictions**: Height, weight, hazmat via ORS API
+- ⚠️ **ORS API Key**: Required for truck routing (free signup at openrouteservice.org)
 
 ### Development Tools
 - ✅ **Package Manager**: npm

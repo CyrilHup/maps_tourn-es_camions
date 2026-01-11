@@ -115,7 +115,7 @@ function degToRad(deg: number): number {
  * Generate a unique ID for routes, locations, etc.
  */
 export function generateId(prefix = 'id'): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
 /**

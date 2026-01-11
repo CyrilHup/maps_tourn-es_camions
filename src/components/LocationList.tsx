@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Lock, LockOpen, GripVertical, X, Edit, MapPin, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
 import { Location } from '../types/index.ts';
 import { trimAddress } from '../utils/routeUtils.ts';
@@ -108,20 +108,20 @@ export default function LocationList({
     dragCounterRef.current = 0;
   };
 
-  const startEdit = (location: Location) => {
+  const startEdit = useCallback((location: Location) => {
     setEditingId(location.id);
     setEditValue(location.address);
-  };
+  }, []);
 
-  const saveEdit = () => {
+  const saveEdit = useCallback(() => {
     if (editingId && editValue.trim()) {
       onLocationEdit(editingId, editValue.trim());
     }
     setEditingId(null);
     setEditValue('');
-  };
+  }, [editingId, editValue, onLocationEdit]);
 
-  const saveEditFromSuggestion = (suggestion: AddressSuggestion) => {
+  const saveEditFromSuggestion = useCallback((suggestion: AddressSuggestion) => {
     if (editingId) {
       // Sauvegarder avec les coordonnées de la suggestion
       onLocationEdit(editingId, suggestion.display_name, {
@@ -131,14 +131,14 @@ export default function LocationList({
     }
     setEditingId(null);
     setEditValue('');
-  };
+  }, [editingId, onLocationEdit]);
 
-  const cancelEdit = () => {
+  const cancelEdit = useCallback(() => {
     setEditingId(null);
     setEditValue('');
-  };
+  }, []);
 
-  const moveLocationUp = (index: number) => {
+  const moveLocationUp = useCallback((index: number) => {
     if (index > 0) {
       const newLocations = [...locations];
       [newLocations[index - 1], newLocations[index]] = [newLocations[index], newLocations[index - 1]];
@@ -151,9 +151,9 @@ export default function LocationList({
       
       onLocationUpdate(updatedLocations);
     }
-  };
+  }, [locations, onLocationUpdate]);
 
-  const moveLocationDown = (index: number) => {
+  const moveLocationDown = useCallback((index: number) => {
     if (index < locations.length - 1) {
       const newLocations = [...locations];
       [newLocations[index], newLocations[index + 1]] = [newLocations[index + 1], newLocations[index]];
@@ -166,7 +166,7 @@ export default function LocationList({
       
       onLocationUpdate(updatedLocations);
     }
-  };
+  }, [locations, onLocationUpdate]);
 
   if (locations.length === 0) {
     return (
@@ -259,6 +259,7 @@ export default function LocationList({
                       onClick={cancelEdit}
                       className="sm:hidden p-1 text-gray-400 hover:text-red-600 transition-colors touch-manipulation"
                       title="Annuler"
+                      aria-label="Annuler la modification"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -315,6 +316,7 @@ export default function LocationList({
                         disabled={index === 0}
                         className="p-0.5 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                         title="Déplacer vers le haut"
+                        aria-label={`Déplacer ${trimAddress(location.address)} vers le haut`}
                       >
                         <ChevronUp className="h-3 w-3" />
                       </button>
@@ -323,6 +325,7 @@ export default function LocationList({
                         disabled={index === locations.length - 1}
                         className="p-0.5 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                         title="Déplacer vers le bas"
+                        aria-label={`Déplacer ${trimAddress(location.address)} vers le bas`}
                       >
                         <ChevronDown className="h-3 w-3" />
                       </button>
@@ -333,6 +336,7 @@ export default function LocationList({
                     onClick={() => startEdit(location)}
                     className="p-1 text-gray-400 hover:text-blue-600 transition-colors touch-manipulation"
                     title="Modifier"
+                    aria-label={`Modifier l'adresse de ${trimAddress(location.address)}`}
                   >
                     <Edit className="h-3 w-3" />
                   </button>
@@ -345,6 +349,7 @@ export default function LocationList({
                         : 'text-gray-400 hover:text-orange-600'
                     }`}
                     title={location.isLocked ? 'Déverrouiller' : 'Verrouiller'}
+                    aria-label={location.isLocked ? `Déverrouiller ${trimAddress(location.address)}` : `Verrouiller ${trimAddress(location.address)}`}
                   >
                     {location.isLocked ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
                   </button>
@@ -353,6 +358,7 @@ export default function LocationList({
                     onClick={() => onLocationDelete(location.id)}
                     className="p-1 text-gray-400 hover:text-red-600 transition-colors touch-manipulation"
                     title="Supprimer"
+                    aria-label={`Supprimer ${trimAddress(location.address)}`}
                   >
                     <X className="h-3 w-3" />
                   </button>

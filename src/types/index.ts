@@ -1,3 +1,17 @@
+/**
+ * GeoJSON LineString geometry for route polylines
+ */
+export interface GeoJSONLineString {
+  type: 'LineString';
+  coordinates: number[][]; // Array of [longitude, latitude] pairs
+}
+
+/**
+ * GeoJSON geometry that can represent a route path
+ * Can be null when only straight-line fallback is used
+ */
+export type RouteGeometry = GeoJSONLineString | null;
+
 export interface Location {
   id: string;
   address: string;
@@ -27,7 +41,7 @@ export interface RouteSegment {
   distance: number; // in kilometers
   duration: number; // in minutes
   instructions: string[];
-  polyline: any; // GeoJSON geometry object pour les vrais tracés de route
+  polyline: RouteGeometry; // GeoJSON geometry object for actual route traces
 }
 
 export type VehicleType = 'car' | 'truck';

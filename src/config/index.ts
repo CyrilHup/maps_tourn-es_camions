@@ -1,4 +1,6 @@
 // Environment configuration
+import { configLogger as logger } from '../utils/logger';
+
 export const config = {
   mapbox: {
     accessToken: import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '',
@@ -37,7 +39,7 @@ export const validateConfig = () => {
   }
 
   if (errors.length > 0) {
-    console.warn('Avertissements de configuration:', errors);
+    logger.warn('Avertissements de configuration:', errors);
   }
 
   return errors.length === 0;
